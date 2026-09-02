@@ -17,7 +17,8 @@ classifiers = [
 ]
 dependencies = [
     "loguru",
-    "pandas>=3.0.5",
+    "mlweave==0.1.5",
+    "pandas==2.2.2",
     "pip",
     "python-dotenv",
     "requests>=2.34.2",
@@ -25,7 +26,7 @@ dependencies = [
     "tqdm",
     "typer",
 ]
-requires-python = "~=3.12.0"
+requires-python = ">=3.12.11,<3.13"
 
 
 [tool.ruff]
@@ -40,3 +41,10 @@ extend-select = ["I"]  # Add import sorting
 known-first-party = ["adv_ml_at2"]
 force-sort-within-sections = true
 
+[tool.uv.sources]
+mlweave = { index = "testpypi" }
+
+[[tool.uv.index]]
+name = "testpypi"
+url = "https://test.pypi.org/simple/"
+explicit = true
