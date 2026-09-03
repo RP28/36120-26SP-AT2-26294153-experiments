@@ -17,12 +17,15 @@ classifiers = [
 ]
 dependencies = [
     "loguru",
+    "matplotlib==3.9.2",
     "mlweave==0.1.5",
+    "notebook==7.6.2",
     "pandas==2.2.2",
     "pip",
     "python-dotenv",
     "requests>=2.34.2",
     "ruff",
+    "seaborn==0.13.2",
     "tqdm",
     "typer",
 ]

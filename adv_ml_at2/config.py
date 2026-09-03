@@ -22,6 +22,8 @@ MODELS_DIR = PROJ_ROOT / "models"
 REPORTS_DIR = PROJ_ROOT / "reports"
 FIGURES_DIR = REPORTS_DIR / "figures"
 
+CACHE_DIR = RAW_DATA_DIR / "open_meteo_cache"
+
 # Open-Meteo configuration
 OPEN_METEO_ARCHIVE_URL = "https://archive-api.open-meteo.com/v1/archive"
 
