@@ -222,6 +222,53 @@ def create_cci_forecast_targets(
         result[f"cci_target_{horizon}d"] = target_dates.map(cci_by_date)
     return result
 
+def lag_feature_space(
+    df: pd.DataFrame,
+    target_columns: list[str],
+    time_column: str = "time",
+    lag_days: int = 1,
+) -> pd.DataFrame:
+    """
+    Shift predictor columns back so only prior-day information is used.
+
+    Parameters
+    ----------
+    df:
+        Daily modeling dataset containing a time column, target columns,
+        and predictor columns.
+    target_columns:
+        Columns to keep unshifted as model targets.
+    time_column:
+        Name of the date column.
+    lag_days:
+        Number of days to shift predictor columns.
+
+    Returns
+    -------
+    pd.DataFrame
+        Dataset with target columns unchanged and predictor columns renamed
+        with a lag suffix.
+    """
+    if lag_days < 1:
+        raise ValueError("lag_days must be at least 1.")
+    validate_required_columns(df=df, required_columns=[time_column] + target_columns)
+    result = df.copy()
+    result[time_column] = pd.to_datetime(result[time_column]).dt.normalize()
+    result = result.sort_values(time_column).reset_index(drop=True)
+    if result[time_column].duplicated().any():
+        raise ValueError(f"Dataset must contain only one observation per '{time_column}'.")
+    feature_columns = [
+        column
+        for column in result.columns
+        if column not in [time_column] + target_columns
+    ]
+    lagged_features = result[feature_columns].shift(lag_days)
+    lagged_features = lagged_features.rename(
+        columns={column: f"{column}_lag_{lag_days}d" for column in feature_columns}
+    )
+    lagged_df = pd.concat([result[[time_column] + target_columns], lagged_features], axis=1)
+    return lagged_df.dropna(subset=lagged_features.columns).reset_index(drop=True)
+
 @app.command()
 def main(
     # ---- REPLACE DEFAULT PATHS AS APPROPRIATE ----
