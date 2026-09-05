@@ -138,37 +138,51 @@ def calculate_whc(df: pd.DataFrame) -> pd.DataFrame:
     return result
 
 def aggregate_daily_cci(
-    hourly_cci_df: pd.DataFrame,
+    hourly_weather_df: pd.DataFrame,
     time_column: str = "time",
 ) -> pd.DataFrame:
     """
-    Aggregate hourly CCI values into one daily CCI value.
+    Aggregate hourly weather observations first, then calculate daily CCI.
 
-    Daily CCI is represented by the mean of the hourly CCI values
-    available for each calendar day.
+    Daily CCI is calculated from daily weather inputs, rather than
+    calculating hourly CCI values and averaging them.
 
     Parameters
     ----------
-    hourly_cci_df:
-        Hourly weather observations containing a 'cci' column.
+    hourly_weather_df:
+        Hourly weather observations containing the raw CCI input columns.
     time_column:
         Name of the datetime column.
 
     Returns
     -------
     pd.DataFrame
-        Daily CCI values with one row per calendar day.
+        Daily weather observations with CCI values, one row per calendar day.
     """
-    validate_required_columns(df=hourly_cci_df, required_columns=[time_column, "cci"])
-    result = hourly_cci_df[[time_column, "cci"]].copy()
+    required_columns = [
+        time_column,
+        "temperature_2m",
+        "relative_humidity_2m",
+        "wind_speed_10m",
+        "cloud_cover",
+        "precipitation",
+    ]
+    validate_required_columns(df=hourly_weather_df, required_columns=required_columns)
+    result = hourly_weather_df[required_columns].copy()
     result[time_column] = pd.to_datetime(result[time_column])
     result["date"] = result[time_column].dt.normalize()
-    daily_cci_df = (
+    daily_weather_df = (
         result.groupby("date", as_index=False)
-        .agg(cci=("cci", "mean"))
+        .agg(
+            temperature_2m=("temperature_2m", "mean"),
+            relative_humidity_2m=("relative_humidity_2m", "mean"),
+            wind_speed_10m=("wind_speed_10m", "mean"),
+            cloud_cover=("cloud_cover", "mean"),
+            precipitation=("precipitation", "sum"),
+        )
         .rename(columns={"date": time_column})
     )
-    return daily_cci_df
+    return calculate_cci(daily_weather_df)
 
 def create_cci_forecast_targets(
     daily_weather_df: pd.DataFrame,
