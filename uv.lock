@@ -25,7 +25,7 @@ dependencies = [
 requires-dist = [
     { name = "loguru" },
     { name = "matplotlib", specifier = "==3.9.2" },
-    { name = "mlweave", specifier = "==0.1.5", index = "https://test.pypi.org/simple/" },
+    { name = "mlweave", specifier = "==0.1.6", index = "https://test.pypi.org/simple/" },
     { name = "notebook", specifier = "==7.6.2" },
     { name = "pandas", specifier = "==2.2.2" },
     { name = "pip" },
@@ -889,7 +889,7 @@ wheels = [
 
 [[package]]
 name = "mlweave"
-version = "0.1.5"
+version = "0.1.6"
 source = { registry = "https://test.pypi.org/simple/" }
 dependencies = [
     { name = "matplotlib" },
@@ -899,9 +899,9 @@ dependencies = [
     { name = "scipy" },
     { name = "seaborn" },
 ]
-sdist = { url = "https://test-files.pythonhosted.org/packages/4d/ac/8e4e667f5c03c06f0e54a9f11f792530a555e5e2f6948baf51bc34fe5f1b/mlweave-0.1.5.tar.gz", hash = "sha256:566194a86fcf2c3ad9311f3e026c60efc58e8cc656ee5763e5324a60df9c40ea", size = 37717, upload-time = "2026-08-30T12:51:20.364Z" }
+sdist = { url = "https://test-files.pythonhosted.org/packages/e0/7e/3e8eb65dda13ed2e2969e7549234cf2f9175144eb19774194474b3242bfa/mlweave-0.1.6.tar.gz", hash = "sha256:ea41508d9f65680a4a401afb06335d75df46ac054aad26c465c30003180bde09", size = 37762, upload-time = "2026-09-03T08:06:37.661Z" }
 wheels = [
-    { url = "https://test-files.pythonhosted.org/packages/f4/05/0ffb4bdbdabf9c44c7b592120d845d92c1999051636dce174aa8f5055b83/mlweave-0.1.5-py3-none-any.whl", hash = "sha256:33828e2d2fcc1428b2cb04da14ff3d4b5d0f89f79d4fb91e6f32256dee6b5adf", size = 55020, upload-time = "2026-08-30T12:51:19.016Z" },
+    { url = "https://test-files.pythonhosted.org/packages/9d/99/31d29851a09f0ad6dc1a3ca410341b8970cc7480f01a7f797ea53518cfa2/mlweave-0.1.6-py3-none-any.whl", hash = "sha256:1afcd3bc4e3fa1603c851b16341e76f675feb575f1ae9f6a3647614823c83f3b", size = 55096, upload-time = "2026-09-03T08:06:35.46Z" },
 ]
 
 [[package]]
