@@ -16,6 +16,7 @@ classifiers = [
     
 ]
 dependencies = [
+    "lightgbm==4.7.0",
     "loguru",
     "matplotlib==3.9.2",
     "mlweave==0.1.6",
@@ -28,6 +29,7 @@ dependencies = [
     "seaborn==0.13.2",
     "tqdm",
     "typer",
+    "xgboost>=2.0",
 ]
 requires-python = ">=3.12.11,<3.13"
 
