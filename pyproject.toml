@@ -19,7 +19,7 @@ dependencies = [
     "lightgbm==4.7.0",
     "loguru",
     "matplotlib==3.9.2",
-    "mlweave==0.1.6",
+    "mlweave==0.1.7",
     "notebook==7.6.2",
     "pandas==2.2.2",
     "pip",
