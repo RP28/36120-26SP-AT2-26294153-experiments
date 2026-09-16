@@ -9,6 +9,13 @@ from adv_ml_at2.config import PROCESSED_DATA_DIR
 
 app = typer.Typer()
 
+WHC_LABELS = {
+    0: "Low Risk",
+    1: "Moderate Risk",
+    2: "High Risk",
+    3: "Extreme Risk",
+}
+
 def validate_required_columns(
     df: pd.DataFrame,
     required_columns: list[str],
@@ -96,11 +103,11 @@ def calculate_whi(df: pd.DataFrame) -> pd.DataFrame:
     ]
     validate_required_columns(df=df, required_columns=required_columns)
     result = df.copy()
-    result["rain_hazard"] = (result["precipitation"] / 30).clip(upper=1)
-    result["wind_hazard"] = (result["wind_gusts_10m"] / 100).clip(upper=1)
-    result["cloud_hazard"] = (result["cloud_cover"] / 100).clip(upper=1)
-    result["snow_hazard"] = (result["snowfall"] / 15).clip(upper=1)
-    result["temperature_hazard"] = ((result["temperature_2m"] - 22).abs() / 25).clip(upper=1)
+    result["rain_hazard"] = (result["precipitation"] / 30).clip(lower=0, upper=1)
+    result["wind_hazard"] = (result["wind_gusts_10m"] / 100).clip(lower=0, upper=1)
+    result["cloud_hazard"] = (result["cloud_cover"] / 100).clip(lower=0, upper=1)
+    result["snow_hazard"] = (result["snowfall"] / 15).clip(lower=0, upper=1)
+    result["temperature_hazard"] = ((result["temperature_2m"] - 22).abs() / 25).clip(lower=0, upper=1)
     result["whi"] = 100 * (
         0.30 * result["rain_hazard"]
         + 0.30 * result["wind_hazard"]
@@ -128,13 +135,145 @@ def calculate_whc(df: pd.DataFrame) -> pd.DataFrame:
     result = df.copy()
     result["whc"] = pd.cut(result["whi"], bins=[float("-inf"), 25, 50, 75, float("inf")],
         labels=[0, 1, 2, 3], right=False).astype("int64")
-    whc_labels = {
-        0: "Low Risk",
-        1: "Moderate Risk",
-        2: "High Risk",
-        3: "Extreme Risk",
-    }
-    result["whc_label"] = result["whc"].map(whc_labels)
+    result["whc_label"] = result["whc"].map(WHC_LABELS)
+    return result
+
+def aggregate_daily_whi(
+    hourly_weather_df: pd.DataFrame,
+    time_column: str = "time",
+) -> pd.DataFrame:
+    """
+    Aggregate hourly weather observations, then calculate daily WHI and WHC.
+
+    Daily hazard inputs follow the assignment definition:
+    precipitation and snowfall use daily totals, wind gusts use the daily
+    maximum, and cloud cover and temperature use daily means.
+
+    Parameters
+    ----------
+    hourly_weather_df:
+        Hourly weather observations containing the raw WHI input columns.
+    time_column:
+        Name of the datetime column.
+
+    Returns
+    -------
+    pd.DataFrame
+        Daily weather observations with WHI values and WHC labels.
+    """
+    required_columns = [
+        time_column,
+        "precipitation",
+        "wind_gusts_10m",
+        "cloud_cover",
+        "snowfall",
+        "temperature_2m",
+    ]
+    validate_required_columns(df=hourly_weather_df, required_columns=required_columns)
+    result = hourly_weather_df[required_columns].copy()
+    result[time_column] = pd.to_datetime(result[time_column])
+    result["date"] = result[time_column].dt.normalize()
+    daily_weather_df = (
+        result.groupby("date", as_index=False)
+        .agg(
+            precipitation=("precipitation", "sum"),
+            wind_gusts_10m=("wind_gusts_10m", "max"),
+            cloud_cover=("cloud_cover", "mean"),
+            snowfall=("snowfall", "sum"),
+            temperature_2m=("temperature_2m", "mean"),
+        )
+        .rename(columns={"date": time_column})
+    )
+    return calculate_whc(calculate_whi(daily_weather_df))
+
+def create_whc_forecast_targets(
+    daily_hazard_df: pd.DataFrame,
+    time_column: str = "time",
+    horizon: int = 7,
+    target_column: str = "whc",
+    label_column: str = "whc_label",
+) -> pd.DataFrame:
+    """
+    Create an exactly-N-day-ahead WHC classification target.
+
+    Target values are matched by calendar date rather than by row position, so
+    missing calendar days cannot silently change the forecast horizon.
+
+    Parameters
+    ----------
+    daily_hazard_df:
+        Daily dataset containing WHC values.
+    time_column:
+        Name of the date column.
+    horizon:
+        Forecast horizon in calendar days.
+    target_column:
+        Column containing the current-day WHC class.
+    label_column:
+        Column containing the current-day WHC label.
+
+    Returns
+    -------
+    pd.DataFrame
+        Copy of the daily dataset with future WHC target columns added.
+    """
+    if horizon < 1:
+        raise ValueError("horizon must be at least 1.")
+    validate_required_columns(
+        df=daily_hazard_df,
+        required_columns=[time_column, target_column, label_column],
+    )
+    result = daily_hazard_df.copy()
+    result[time_column] = pd.to_datetime(result[time_column]).dt.normalize()
+    result = result.sort_values(time_column).reset_index(drop=True)
+    if result[time_column].duplicated().any():
+        raise ValueError(f"Daily dataset must contain only one observation per '{time_column}'.")
+
+    future_dates = result[time_column] + pd.Timedelta(days=horizon)
+    target_by_date = result.set_index(time_column)[target_column]
+    label_by_date = result.set_index(time_column)[label_column]
+    result[f"{target_column}_target_{horizon}d"] = future_dates.map(target_by_date)
+    result[f"{label_column}_target_{horizon}d"] = future_dates.map(label_by_date)
+    return result
+
+def build_weather_hazard_target_dataset(
+    hourly_weather_df: pd.DataFrame,
+    time_column: str = "time",
+    horizon: int = 7,
+    drop_missing_target: bool = True,
+) -> pd.DataFrame:
+    """
+    Build the daily weather-hazard classification dataset.
+
+    Parameters
+    ----------
+    hourly_weather_df:
+        Hourly weather observations.
+    time_column:
+        Name of the datetime column.
+    horizon:
+        Forecast horizon in calendar days.
+    drop_missing_target:
+        Whether to remove rows without a future target, normally the final
+        horizon days of the dataset.
+
+    Returns
+    -------
+    pd.DataFrame
+        Daily WHI/WHC features with an exactly-N-day-ahead WHC target.
+    """
+    target_column = f"whc_target_{horizon}d"
+    result = create_whc_forecast_targets(
+        daily_hazard_df=aggregate_daily_whi(
+            hourly_weather_df=hourly_weather_df,
+            time_column=time_column,
+        ),
+        time_column=time_column,
+        horizon=horizon,
+    )
+    if drop_missing_target:
+        result = result.dropna(subset=[target_column]).reset_index(drop=True)
+        result[target_column] = result[target_column].astype("int64")
     return result
 
 def aggregate_daily_cci(
