@@ -1,8 +1,9 @@
+from collections.abc import Sequence
 from pathlib import Path
 
 from loguru import logger
-from tqdm import tqdm
 import pandas as pd
+from tqdm import tqdm
 import typer
 
 from adv_ml_at2.config import PROCESSED_DATA_DIR
@@ -326,7 +327,7 @@ def aggregate_daily_cci(
 def create_cci_forecast_targets(
     daily_weather_df: pd.DataFrame,
     time_column: str = "time",
-    horizons: list[int] = [1, 2, 3]
+    horizons: list[int] | None = None,
 ) -> pd.DataFrame:
     """
     Create CCI regression targets for one, two and three calendar days ahead.
@@ -349,6 +350,8 @@ def create_cci_forecast_targets(
     pd.DataFrame
         Copy of the daily dataset with CCI targets for the specified horizons.
     """
+    if horizons is None:
+        horizons = [1, 2, 3]
     validate_required_columns(df=daily_weather_df, required_columns=[time_column, "cci"])
     result = daily_weather_df.copy()
     result[time_column] = pd.to_datetime(result[time_column]).dt.normalize()
@@ -365,7 +368,7 @@ def lag_feature_space(
     df: pd.DataFrame,
     target_columns: list[str],
     time_column: str = "time",
-    lag_days: int = 1,
+    lag_days: int | Sequence[int] = 1,
 ) -> pd.DataFrame:
     """
     Shift predictor columns back so only prior-day information is used.
@@ -380,7 +383,8 @@ def lag_feature_space(
     time_column:
         Name of the date column.
     lag_days:
-        Number of days to shift predictor columns.
+        Number of days to shift predictor columns, or multiple lag values
+        to create a wider historical feature space.
 
     Returns
     -------
@@ -388,8 +392,14 @@ def lag_feature_space(
         Dataset with target columns unchanged and predictor columns renamed
         with a lag suffix.
     """
-    if lag_days < 1:
-        raise ValueError("lag_days must be at least 1.")
+    if isinstance(lag_days, int):
+        lag_values = [lag_days]
+    else:
+        lag_values = list(lag_days)
+    if not lag_values:
+        raise ValueError("lag_days must contain at least one lag value.")
+    if any(lag < 1 for lag in lag_values):
+        raise ValueError("lag_days values must be at least 1.")
     validate_required_columns(df=df, required_columns=[time_column] + target_columns)
     result = df.copy()
     result[time_column] = pd.to_datetime(result[time_column]).dt.normalize()
@@ -401,12 +411,23 @@ def lag_feature_space(
         for column in result.columns
         if column not in [time_column] + target_columns
     ]
-    lagged_features = result[feature_columns].shift(lag_days)
-    lagged_features = lagged_features.rename(
-        columns={column: f"{column}_lag_{lag_days}d" for column in feature_columns}
+    lagged_feature_frames = []
+    for lag in lag_values:
+        lagged_features = result[feature_columns].shift(lag)
+        lagged_features = lagged_features.rename(
+            columns={column: f"{column}_lag_{lag}d" for column in feature_columns}
+        )
+        lagged_feature_frames.append(lagged_features)
+    lagged_feature_columns = [
+        column
+        for lagged_features in lagged_feature_frames
+        for column in lagged_features.columns
+    ]
+    lagged_df = pd.concat(
+        [result[[time_column] + target_columns], *lagged_feature_frames],
+        axis=1,
     )
-    lagged_df = pd.concat([result[[time_column] + target_columns], lagged_features], axis=1)
-    return lagged_df.dropna(subset=lagged_features.columns).reset_index(drop=True)
+    return lagged_df.dropna(subset=lagged_feature_columns).reset_index(drop=True)
 
 @app.command()
 def main(
