@@ -16,6 +16,7 @@ classifiers = [
     
 ]
 dependencies = [
+    "imbalanced-learn>=0.14.2",
     "lightgbm==4.7.0",
     "loguru",
     "matplotlib==3.9.2",
