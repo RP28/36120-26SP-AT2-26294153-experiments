@@ -7,6 +7,7 @@ name = "adv-ml-at2"
 version = "0.0.1"
 source = { editable = "." }
 dependencies = [
+    { name = "cloudpickle" },
     { name = "imbalanced-learn" },
     { name = "lightgbm" },
     { name = "loguru" },
@@ -29,6 +30,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
+    { name = "cloudpickle", specifier = "==3.1.2" },
     { name = "imbalanced-learn", specifier = ">=0.14.2" },
     { name = "lightgbm", specifier = "==4.7.0" },
     { name = "loguru" },
