@@ -24,12 +24,20 @@ from adv_ml_at2.config import (
 
 app = typer.Typer()
 
-def chunk_date_range(start_date: str, end_date: str) -> list[tuple[str, str]]:
+def chunk_date_range(
+    start_date: str,
+    end_date: str,
+    training: bool = True,
+) -> list[tuple[str, str]]:
     """
-    Split a date range into full calendar-year chunks for fetching.
+    Split a date range into full calendar-year chunks for training.
+
+    Serving requests keep the exact requested range.
     """
     start = date.fromisoformat(start_date)
     end = date.fromisoformat(end_date)
+    if not training:
+        return [(start.isoformat(), end.isoformat())]
     return [
         (date(year, 1, 1).isoformat(), date(year, 12, 31).isoformat())
         for year in range(start.year, end.year + 1)
@@ -45,7 +53,11 @@ def _calendar_year_bounds(start_date: str, end_date: str) -> tuple[str, str]:
         raise ValueError("fetch_historical_weather must be called for one calendar year at a time.")
     return date(start.year, 1, 1).isoformat(), date(start.year, 12, 31).isoformat()
 
-def validate_dates(start_date: str, end_date: str) -> None:
+def validate_dates(
+    start_date: str,
+    end_date: str,
+    training: bool = True,
+) -> None:
     """Validate the requested historical data period."""
     try:
         start = date.fromisoformat(start_date)
@@ -54,7 +66,7 @@ def validate_dates(start_date: str, end_date: str) -> None:
         raise ValueError("Dates must be provided in YYYY-MM-DD format.") from exc
     if start > end:
         raise ValueError("start_date must be before or equal to end_date.")
-    if end > MAX_EXPERIMENT_DATE:
+    if training and end > MAX_EXPERIMENT_DATE:
         raise ValueError("Data from 2026 onwards cannot be used during experimentation.")
 
 def _build_api_cache_path(
@@ -187,10 +199,12 @@ def fetch_historical_weather(
     cache_dir: Path = CACHE_DIR,
     max_retries: int = 5,
     retry_backoff_seconds: float = 15.0,
+    training: bool = True,
 ) -> dict:
-    """Fetch one full calendar year of historical Sydney weather."""
-    validate_dates(start_date, end_date)
-    start_date, end_date = _calendar_year_bounds(start_date, end_date)
+    """Fetch historical Sydney weather for training or serving."""
+    validate_dates(start_date, end_date, training=training)
+    if training:
+        start_date, end_date = _calendar_year_bounds(start_date, end_date)
     additional_hourly_variables = additional_hourly_variables or []
     daily_variables = daily_variables or []
     hourly_variables = list(dict.fromkeys(REQUIRED_WEATHER_VARIABLES + additional_hourly_variables))
@@ -295,15 +309,17 @@ def collect_historical_weather(
     cache_dir: Path = CACHE_DIR,
     max_retries: int = 5,
     retry_backoff_seconds: float = 15.0,
+    training: bool = True,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Collect historical hourly and daily Sydney weather observations."""
-    validate_dates(start_date, end_date)
+    validate_dates(start_date, end_date, training=training)
     daily_variables = daily_variables or DEFAULT_DAILY_WEATHER_VARIABLES
     date_chunks = chunk_date_range(
         start_date=start_date,
         end_date=end_date,
+        training=training,
     )
-    logger.info(f"Processing {len(date_chunks)} calendar-year chunks with cache {'enabled' if use_cache else 'disabled'}...")
+    logger.info(f"Processing {len(date_chunks)} chunks with cache {'enabled' if use_cache else 'disabled'}...")
     results: list[dict] = []
     for index, (chunk_start, chunk_end) in enumerate(date_chunks, start=1):
         data = fetch_historical_weather(
@@ -316,6 +332,7 @@ def collect_historical_weather(
             cache_dir=cache_dir,
             max_retries=max_retries,
             retry_backoff_seconds=retry_backoff_seconds,
+            training=training,
         )
         logger.info(f"Collected chunk {index}/{len(date_chunks)}: {chunk_start} to {chunk_end}")
         results.append(data)
