@@ -226,29 +226,129 @@ models/model_serving/model_metadata.json
 `model_metadata.json` documents deployed-model targets, algorithms, forecast horizons,
 features, feature importance and performance metrics for the API repository.
 
-## Deployment Handoff
+## FastAPI Artifact Contract
 
-The assignment brief requires a separate FastAPI deployment repository with these
-endpoints:
+The FastAPI repository should treat the files under `models/` as the inference
+contract for this experimentation repository.
 
-```text
-GET /
-GET /health
-GET /predict/index/comfort_climate
-GET /predict/category/weather_hazard
-GET /model-metadata
+The API environment must install this project's runtime dependencies, including
+`adv_ml_at2`, `mlweave`, `cloudpickle`, `scikit-learn`, `imbalanced-learn`, `xgboost`
+and `lightgbm`, because the pickled workflows reference those classes at load time.
+
+Artifact map:
+
+| File | Serialized Type | API Purpose |
+| --- | --- | --- |
+| `models/comfort_climate/experiment_1/experiment_1.pkl` | `dict` | Regression experiment archive, not selected for serving. |
+| `models/comfort_climate/experiment_2/experiment_2.pkl` | `dict` | Selected CCI serving workflows for 1, 2 and 3 day forecasts. |
+| `models/comfort_climate/experiment_3/experiment_3.pkl` | `dict` | Regression experiment archive, not selected for serving. |
+| `models/weather_hazard/experiment_1/experiment_1.pkl` | `dict` | Classification experiment archive, not selected for serving. |
+| `models/weather_hazard/experiment_2/experiment_2.pkl` | `dict` | Selected WHC serving workflow for the 7 day forecast. |
+| `models/weather_hazard/experiment_3/experiment_3.pkl` | `dict` | Classification experiment archive, not selected for serving. |
+| `models/model_serving/data_fetch.pkl` | `function` | Shared serving data builder used before workflow preprocessing. |
+| `models/model_serving/model_metadata.json` | `list[dict]` | Metadata returned by `/model-metadata`. |
+
+### Experiment Pickle Files
+
+All experiment model files are serialized with `cloudpickle` and contain a top-level
+dictionary with this structure:
+
+```python
+{
+    "ml_workflow": ...,
+    "model": None,
+}
 ```
 
-This experimentation repository provides the trained artifacts and metadata needed by
-that deployment repository. The deployment README should document the Render URL,
-Docker/FastAPI startup steps, endpoint examples and error handling behaviour.
+The `ml_workflow` value is the primary inference object:
 
-## Custom Package
+- Comfort-climate artifacts store a dictionary of workflows keyed by target:
+  `cci_target_1d`, `cci_target_2d` and `cci_target_3d`.
+- Weather-hazard artifacts store a single workflow for `whc_target_7d`.
+- Each workflow contains the fitted preprocessing object, fitted model and fitted
+  feature matrix metadata required to align inference columns.
 
-Reusable project functionality is kept in the `adv_ml_at2` package. The notebooks use
-this package for Open-Meteo data retrieval, target creation, feature engineering and
-custom modelling helpers. If the package is changed for deployment, the assignment
-brief requires the updated package to be published to TestPyPI.
+The general `model` value is `None` when there was no intention to overwrite the model
+inside the fitted workflow for inference. In that case, the API must use
+`artifact["ml_workflow"]` and each workflow's fitted `model_` attribute. If a future
+artifact sets `artifact["model"]` to a non-null value, the API may treat it as an
+explicit model override for that artifact.
+
+Expected inference pattern:
+
+```python
+import cloudpickle
+
+with open("models/comfort_climate/experiment_2/experiment_2.pkl", "rb") as file:
+    artifact = cloudpickle.load(file)
+
+workflow = artifact["ml_workflow"]["cci_target_1d"]
+transformed = workflow.preprocessing_.transform(serving_df)
+X = transformed.loc[:, workflow.X_parts_[0].columns]
+prediction = workflow.model_.predict(X)
+```
+
+For weather hazard:
+
+```python
+with open("models/weather_hazard/experiment_2/experiment_2.pkl", "rb") as file:
+    artifact = cloudpickle.load(file)
+
+workflow = artifact["ml_workflow"]
+transformed = workflow.preprocessing_.transform(serving_df)
+X = transformed.loc[:, workflow.X_parts_[0].columns]
+prediction = workflow.model_.predict(X)
+```
+
+Selected serving artifacts:
+
+```text
+models/comfort_climate/experiment_2/experiment_2.pkl
+models/weather_hazard/experiment_2/experiment_2.pkl
+```
+
+### `data_fetch.pkl`
+
+`models/model_serving/data_fetch.pkl` is a `cloudpickle`-serialized function:
+
+```python
+fetch_dataset_for_serving(start_date: str, end_date: str, classification: bool = False)
+```
+
+It calls the Open-Meteo data retrieval helpers, builds daily features, adds the required
+lagged feature names, and adds placeholder target columns so the saved preprocessing
+pipelines receive the schema they were fitted with.
+
+- Use `classification=False` for CCI regression requests.
+- Use `classification=True` for WHC classification requests.
+- The returned DataFrame is not the final model matrix; the API still needs to pass it
+  through the selected workflow's fitted `preprocessing_` object and then align columns
+  with `workflow.X_parts_[0].columns`.
+- The function currently calls the downstream Open-Meteo API with cache disabled and
+  refresh enabled, so the deployed API should handle network errors and invalid dates
+  gracefully.
+
+### `model_metadata.json`
+
+`models/model_serving/model_metadata.json` is a JSON list with one entry per deployed
+target family. Each entry contains:
+
+```text
+target
+prediction_type
+algorithm
+experiment
+forecast_horizon
+features
+feature_importance_method
+feature_importance_scoring
+feature_importance
+performance_metrics
+```
+
+The FastAPI `/model-metadata` endpoint should return this JSON, or a direct API-shaped
+wrapper around it, without recalculating feature importance or performance metrics at
+request time.
 
 ## Known Limitations
 
