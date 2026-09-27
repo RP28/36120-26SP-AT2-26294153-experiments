@@ -103,22 +103,25 @@ This project uses Python 3.12 and `uv`.
 
 ```bash
 uv sync
-source .venv/bin/activate
 ```
 
-Useful Make commands:
+Most commands can be run without manually activating the virtual environment by using
+`uv run`.
+
+Useful commands:
 
 ```bash
-make requirements
-make lint
-make format
-make clean
+uv run ruff format --check
+uv run ruff check
+uv run ruff check --fix
+uv run ruff format
+uv run jupyter notebook
 ```
 
 To rebuild the raw weather cache and base datasets:
 
 ```bash
-python adv_ml_at2/dataset.py
+uv run python adv_ml_at2/dataset.py
 ```
 
 ## Running The Experiments
@@ -138,6 +141,18 @@ notebooks/weather_hazard/36120_26SP_AT2_26294153_experiment_3.ipynb
 notebooks/comfort_climate/36120_26SP_AT2_26294153_experiment_1.ipynb
 notebooks/comfort_climate/36120_26SP_AT2_26294153_experiment_2.ipynb
 notebooks/comfort_climate/36120_26SP_AT2_26294153_experiment_3.ipynb
+```
+
+Open the notebooks with:
+
+```bash
+uv run jupyter notebook
+```
+
+To execute a notebook non-interactively, use the same order and run:
+
+```bash
+uv run jupyter nbconvert --to notebook --execute --inplace <notebook_path>
 ```
 
 Each notebook saves its processed matrices under `data/processed/<target>/experiment_n/`
@@ -235,34 +250,11 @@ this package for Open-Meteo data retrieval, target creation, feature engineering
 custom modelling helpers. If the package is changed for deployment, the assignment
 brief requires the updated package to be published to TestPyPI.
 
-## Submission Checklist
-
-- Experimentation repository contains notebooks, models, configuration and README.
-- FastAPI repository contains deployment-ready API code, Docker support, model
-  artifacts and README.
-- Render deployment remains accessible during marking.
-- Required API endpoints are operational and documented.
-- Repository URLs and Render URL are included in the final report.
-- Final report discusses data sourcing, target creation, feature engineering,
-  experimental design, model performance, business recommendations, ethics,
-  deployment architecture, limitations and future work.
-
-## Reproducibility Notes
-
-- Chronological train/validation/test splits are used to preserve the time-series
-  forecasting setup.
-- Feature engineering uses lagged, rolling, exponentially weighted and seasonal
-  predictors to reduce target leakage.
-- Model artifacts are serialized with `cloudpickle`.
-- Main dependencies are pinned or constrained in `pyproject.toml` and `uv.lock`.
-- The notebooks are the primary experimental record and include rationale,
-  evaluation, business impact discussion and limitations.
-
 ## Known Limitations
 
 - CCI forecasts retain useful signal but still compress the range of more extreme
   comfort conditions.
-- WHC classes are imbalanced; High and Extreme Risk events remain difficult to detect
+- WHC classes are imbalanced. High and Extreme Risk events remain difficult to detect
   reliably.
 - The WHC model has low high-risk alert precision, so false alerts are expected.
 - Production use should include monitoring, retraining and validation on post-2025
